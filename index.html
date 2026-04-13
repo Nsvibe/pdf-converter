@@ -1,1 +1,970 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Converter — TXT & WORD</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface-2: #1a1a26;
+    --border: #2a2a3a;
+    --text: #e8e8f0;
+    --text-dim: #8888a0;
+    --accent: #6c5ce7;
+    --accent-light: #a29bfe;
+    --accent-glow: rgba(108, 92, 231, 0.3);
+    --success: #00cec9;
+    --success-glow: rgba(0, 206, 201, 0.3);
+    --warning: #fdcb6e;
+    --danger: #ff6b6b;
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
 
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Outfit', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated background */
+  .bg-grid {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(108,92,231,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108,92,231,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .bg-glow {
+    position: fixed;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.15;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .bg-glow-1 { top: -200px; left: -100px; background: var(--accent); }
+  .bg-glow-2 { bottom: -200px; right: -100px; background: var(--success); opacity: 0.1; }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 20px 60px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+    animation: fadeInDown 0.8s ease;
+  }
+
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .logo-icon {
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-light));
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 8px 32px var(--accent-glow);
+  }
+
+  .logo-text {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--text), var(--accent-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0.3px;
+  }
+
+  /* Drop Zone */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 56px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+    animation: fadeInUp 0.8s ease 0.15s both;
+  }
+
+  .drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at center, var(--accent-glow), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+  }
+
+  .drop-zone:hover::before, .drop-zone.drag-over::before {
+    opacity: 1;
+  }
+
+  .drop-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    display: block;
+    position: relative;
+    z-index: 1;
+  }
+
+  .drop-text {
+    font-size: 17px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .drop-hint {
+    color: var(--text-dim);
+    font-size: 13px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .drop-hint .browse {
+    color: var(--accent-light);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* File info card */
+  .file-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    animation: fadeInUp 0.5s ease;
+  }
+
+  .file-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #ff6b6b33, #ff6b6b11);
+    border: 1px solid #ff6b6b44;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .file-details { flex: 1; min-width: 0; }
+
+  .file-name {
+    font-weight: 600;
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .file-meta {
+    color: var(--text-dim);
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 3px;
+  }
+
+  .file-remove {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .file-remove:hover {
+    background: #ff6b6b22;
+    border-color: #ff6b6b66;
+    color: var(--danger);
+  }
+
+  /* Format selector */
+  .format-section {
+    margin-top: 28px;
+    animation: fadeInUp 0.8s ease 0.3s both;
+  }
+
+  .section-label {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+  }
+
+  .format-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .format-btn {
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 20px;
+    background: var(--surface);
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    text-align: left;
+    color: var(--text);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .format-btn::after {
+    content: '';
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--border);
+    border-radius: 50%;
+    transition: all 0.3s;
+  }
+
+  .format-btn.active {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, rgba(108,92,231,0.08), rgba(108,92,231,0.02));
+    box-shadow: 0 0 0 1px var(--accent-glow);
+  }
+
+  .format-btn.active::after {
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+
+  .format-btn:hover:not(.active) {
+    border-color: var(--text-dim);
+    transform: translateY(-1px);
+  }
+
+  .format-emoji { font-size: 28px; margin-bottom: 10px; display: block; }
+  .format-name { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+  .format-desc { color: var(--text-dim); font-size: 12px; line-height: 1.5; }
+
+  /* Convert button */
+  .convert-btn {
+    width: 100%;
+    margin-top: 28px;
+    padding: 18px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: 'Outfit', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    background: linear-gradient(135deg, var(--accent), #7c6cf0);
+    color: white;
+    box-shadow: 0 8px 32px var(--accent-glow);
+    animation: fadeInUp 0.8s ease 0.45s both;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .convert-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, #7c6cf0, var(--accent-light));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .convert-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 48px var(--accent-glow);
+  }
+
+  .convert-btn:hover:not(:disabled)::before { opacity: 1; }
+
+  .convert-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .convert-btn span { position: relative; z-index: 1; }
+
+  /* Progress bar */
+  .progress-wrap {
+    margin-top: 20px;
+    animation: fadeInUp 0.4s ease;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 13px;
+  }
+
+  .progress-label { color: var(--text-dim); }
+  .progress-pct { font-family: 'JetBrains Mono', monospace; color: var(--accent-light); }
+
+  .progress-bar {
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-light));
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+
+  /* Result */
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--success);
+    border-radius: var(--radius);
+    padding: 28px;
+    margin-top: 24px;
+    text-align: center;
+    animation: fadeInUp 0.6s ease;
+    box-shadow: 0 0 40px var(--success-glow);
+  }
+
+  .result-icon { font-size: 48px; margin-bottom: 12px; }
+
+  .result-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .result-desc {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+
+  .download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 32px;
+    background: var(--success);
+    color: var(--bg);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: 'Outfit', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+
+  .download-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px var(--success-glow);
+  }
+
+  /* Preview box */
+  .preview-box {
+    margin-top: 20px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 20px;
+    max-height: 240px;
+    overflow-y: auto;
+    text-align: left;
+  }
+
+  .preview-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  .preview-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* Error */
+  .error-msg {
+    background: #ff6b6b15;
+    border: 1px solid #ff6b6b44;
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    margin-top: 20px;
+    color: var(--danger);
+    font-size: 14px;
+    animation: shake 0.5s ease;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 56px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12px;
+    animation: fadeInUp 0.8s ease 0.6s both;
+  }
+
+  .footer-features {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 12px;
+  }
+
+  .footer-feature {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .footer-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--success);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--success-glow);
+  }
+
+  /* Notes section */
+  .notes-section {
+    margin-top: 40px;
+    animation: fadeInUp 0.8s ease 0.55s both;
+  }
+
+  .notes-toggle {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s;
+  }
+
+  .notes-toggle:hover {
+    border-color: var(--accent);
+    background: var(--surface-2);
+  }
+
+  .notes-toggle .arrow {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-dim);
+    transition: transform 0.3s;
+  }
+
+  .notes-toggle.open .arrow {
+    transform: rotate(180deg);
+  }
+
+  .notes-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .notes-body.open {
+    max-height: 600px;
+  }
+
+  .notes-inner {
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  }
+
+  .note-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+  }
+
+  .note-item:last-child { border-bottom: none; }
+
+  .note-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .note-icon.warn { background: rgba(253,203,110,0.12); }
+  .note-icon.info { background: rgba(108,92,231,0.12); }
+  .note-icon.tip  { background: rgba(0,206,201,0.12); }
+
+  .note-text {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-dim);
+  }
+
+  .note-text strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Animations */
+  @keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="bg-glow bg-glow-1"></div>
+<div class="bg-glow bg-glow-2"></div>
+
+<div class="container">
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">📄</div>
+      <div class="logo-text">PDF Converter</div>
+    </div>
+    <p class="subtitle">PDF 파일을 TXT 또는 WORD 파일로 간편하게 변환하세요</p>
+  </div>
+
+  <!-- Drop Zone -->
+  <div class="drop-zone" id="dropZone">
+    <span class="drop-icon">⬆️</span>
+    <div class="drop-text">PDF 파일을 여기에 끌어다 놓으세요</div>
+    <div class="drop-hint">또는 <span class="browse">파일 선택</span>을 클릭하세요 · 최대 50MB</div>
+    <input type="file" id="fileInput" accept=".pdf" style="display:none">
+  </div>
+
+  <!-- File Card -->
+  <div id="fileCard" style="display:none"></div>
+
+  <!-- Format Selector -->
+  <div class="format-section">
+    <div class="section-label">변환 형식 선택</div>
+    <div class="format-grid">
+      <div class="format-btn active" data-format="txt" onclick="selectFormat('txt')">
+        <span class="format-emoji">📝</span>
+        <div class="format-name">TXT</div>
+        <div class="format-desc">순수 텍스트 파일로 변환</div>
+      </div>
+      <div class="format-btn" data-format="docx" onclick="selectFormat('docx')">
+        <span class="format-emoji">📘</span>
+        <div class="format-name">WORD</div>
+        <div class="format-desc">.docx 워드 문서로 변환</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Convert Button -->
+  <button class="convert-btn" id="convertBtn" disabled onclick="convertFile()">
+    <span>변환하기</span>
+  </button>
+
+  <!-- Progress -->
+  <div id="progressArea"></div>
+
+  <!-- Result -->
+  <div id="resultArea"></div>
+
+  <!-- Notes -->
+  <div class="notes-section">
+    <button class="notes-toggle" id="notesToggle" onclick="toggleNotes()">
+      <span>⚠️</span> 변환 시 참고사항
+      <span class="arrow">▼</span>
+    </button>
+    <div class="notes-body" id="notesBody">
+      <div class="notes-inner">
+        <div class="note-item">
+          <div class="note-icon warn">🖼</div>
+          <div class="note-text"><strong>스캔된 PDF (이미지 PDF)</strong>는 텍스트가 이미지로 저장되어 있어 내용이 추출되지 않습니다. 텍스트 기반 PDF만 정상 변환됩니다.</div>
+        </div>
+        <div class="note-item">
+          <div class="note-icon warn">📐</div>
+          <div class="note-text"><strong>복잡한 레이아웃</strong> (다단 편집, 표, 그래프 등)은 텍스트 순서가 뒤섞이거나 원본과 다르게 추출될 수 있습니다.</div>
+        </div>
+        <div class="note-item">
+          <div class="note-icon warn">🔢</div>
+          <div class="note-text"><strong>수식 · 특수문자 · 외국어</strong>가 포함된 경우 일부 글자가 깨지거나 누락될 수 있습니다.</div>
+        </div>
+        <div class="note-item">
+          <div class="note-icon info">📘</div>
+          <div class="note-text"><strong>WORD 변환 시</strong> 원본의 글꼴, 색상, 이미지 등 서식은 유지되지 않으며 순수 텍스트만 옮겨집니다.</div>
+        </div>
+        <div class="note-item">
+          <div class="note-icon info">🔒</div>
+          <div class="note-text"><strong>암호가 걸린 PDF</strong>는 보안 정책에 따라 변환이 불가능할 수 있습니다.</div>
+        </div>
+        <div class="note-item">
+          <div class="note-icon tip">💡</div>
+          <div class="note-text"><strong>최상의 결과</strong>를 위해 워드 · 한글 등에서 직접 내보낸 텍스트 기반 PDF를 사용해 주세요.</div>
+        </div>
+        <div class="note-item">
+          <div class="note-icon tip">🛡</div>
+          <div class="note-text">모든 변환은 <strong>브라우저 내에서 로컬로 처리</strong>되며, 파일이 서버로 전송되지 않아 개인정보가 안전합니다.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="footer-features">
+      <div class="footer-feature"><div class="footer-dot"></div> 100% 브라우저 처리</div>
+      <div class="footer-feature"><div class="footer-dot"></div> 서버 업로드 없음</div>
+      <div class="footer-feature"><div class="footer-dot"></div> 완전 무료</div>
+    </div>
+    <div>모든 파일은 브라우저에서 로컬로 처리되며, 외부로 전송되지 않습니다.</div>
+  </div>
+</div>
+
+<script>
+  // Set PDF.js worker
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  let selectedFile = null;
+  let selectedFormat = 'txt';
+  let extractedText = '';
+
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const fileCard = document.getElementById('fileCard');
+  const convertBtn = document.getElementById('convertBtn');
+  const progressArea = document.getElementById('progressArea');
+  const resultArea = document.getElementById('resultArea');
+
+  // Drop zone events
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === 'application/pdf') handleFile(file);
+  });
+
+  function handleFile(file) {
+    if (!file || file.type !== 'application/pdf') return;
+    selectedFile = file;
+    resultArea.innerHTML = '';
+    progressArea.innerHTML = '';
+
+    const size = file.size < 1024*1024
+      ? (file.size / 1024).toFixed(1) + ' KB'
+      : (file.size / (1024*1024)).toFixed(1) + ' MB';
+
+    fileCard.style.display = 'block';
+    fileCard.innerHTML = `
+      <div class="file-card">
+        <div class="file-icon">📄</div>
+        <div class="file-details">
+          <div class="file-name">${file.name}</div>
+          <div class="file-meta">${size}</div>
+        </div>
+        <button class="file-remove" onclick="removeFile()" title="제거">✕</button>
+      </div>
+    `;
+    convertBtn.disabled = false;
+  }
+
+  function removeFile() {
+    selectedFile = null;
+    extractedText = '';
+    fileCard.style.display = 'none';
+    fileCard.innerHTML = '';
+    convertBtn.disabled = true;
+    resultArea.innerHTML = '';
+    progressArea.innerHTML = '';
+    fileInput.value = '';
+  }
+
+  function selectFormat(fmt) {
+    selectedFormat = fmt;
+    document.querySelectorAll('.format-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.format === fmt);
+    });
+  }
+
+  function showProgress(pct, label) {
+    progressArea.innerHTML = `
+      <div class="progress-wrap">
+        <div class="progress-header">
+          <span class="progress-label">${label}</span>
+          <span class="progress-pct">${Math.round(pct)}%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${pct}%"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function convertFile() {
+    if (!selectedFile) return;
+    resultArea.innerHTML = '';
+    convertBtn.disabled = true;
+    convertBtn.innerHTML = '<span><span class="spinner"></span>변환 중...</span>';
+
+    try {
+      // Read PDF
+      showProgress(10, 'PDF 로딩 중...');
+      const arrayBuffer = await selectedFile.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const totalPages = pdf.numPages;
+      let fullText = '';
+
+      for (let i = 1; i <= totalPages; i++) {
+        showProgress(10 + (i / totalPages) * 70, `페이지 ${i} / ${totalPages} 처리 중...`);
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const items = content.items;
+        let pageText = '';
+
+        for (let j = 0; j < items.length; j++) {
+          const item = items[j];
+          if (!item.str && item.hasEOL) { pageText += '\n'; continue; }
+
+          if (j > 0 && item.str) {
+            const prev = items[j - 1];
+            if (prev.hasEOL) {
+              pageText += '\n';
+            } else if (prev.str) {
+              const prevEnd = prev.transform[4] + prev.width;
+              const curStart = item.transform[4];
+              const fontSize = Math.abs(item.transform[0]) || 12;
+              const gap = curStart - prevEnd;
+              if (gap > fontSize * 0.3) {
+                pageText += ' ';
+              }
+            }
+          }
+          pageText += item.str;
+        }
+
+        fullText += pageText.trim() + '\n\n';
+      }
+
+      extractedText = fullText.trim();
+      showProgress(90, '파일 생성 중...');
+
+      if (selectedFormat === 'txt') {
+        await generateTXT(extractedText);
+      } else {
+        await generateDOCX(extractedText);
+      }
+
+      showProgress(100, '완료!');
+      setTimeout(() => { progressArea.innerHTML = ''; }, 800);
+
+    } catch (err) {
+      console.error(err);
+      progressArea.innerHTML = '';
+      resultArea.innerHTML = `<div class="error-msg">⚠️ 변환 중 오류가 발생했습니다: ${err.message}</div>`;
+    }
+
+    convertBtn.disabled = false;
+    convertBtn.innerHTML = '<span>변환하기</span>';
+  }
+
+  function generateTXT(text) {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const name = selectedFile.name.replace(/\.pdf$/i, '') + '.txt';
+    const preview = text.substring(0, 800) + (text.length > 800 ? '\n...' : '');
+
+    resultArea.innerHTML = `
+      <div class="result-card">
+        <div class="result-icon">✅</div>
+        <div class="result-title">변환 완료!</div>
+        <div class="result-desc">${name} · ${(new Blob([text]).size / 1024).toFixed(1)} KB</div>
+        <button class="download-btn" onclick="downloadFile('${url}','${name}')">⬇ 다운로드</button>
+        <div class="preview-box">
+          <div class="preview-label">미리보기</div>
+          <div class="preview-text">${escapeHTML(preview)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function generateDOCX(text) {
+    const { Document, Packer, Paragraph, TextRun } = window.docx;
+    const paragraphs = text.split(/\n\n+/).filter(p => p.trim());
+
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: paragraphs.map(p => new Paragraph({
+          children: [new TextRun({ text: p.trim(), size: 24, font: 'Malgun Gothic' })],
+          spacing: { after: 200 }
+        }))
+      }]
+    });
+
+    const blob = await Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const name = selectedFile.name.replace(/\.pdf$/i, '') + '.docx';
+    const preview = text.substring(0, 800) + (text.length > 800 ? '\n...' : '');
+
+    resultArea.innerHTML = `
+      <div class="result-card">
+        <div class="result-icon">✅</div>
+        <div class="result-title">변환 완료!</div>
+        <div class="result-desc">${name} · ${(blob.size / 1024).toFixed(1)} KB</div>
+        <button class="download-btn" onclick="downloadFile('${url}','${name}')">⬇ 다운로드</button>
+        <div class="preview-box">
+          <div class="preview-label">미리보기</div>
+          <div class="preview-text">${escapeHTML(preview)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function downloadFile(url, name) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+  }
+
+  function escapeHTML(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function toggleNotes() {
+    const toggle = document.getElementById('notesToggle');
+    const body = document.getElementById('notesBody');
+    toggle.classList.toggle('open');
+    body.classList.toggle('open');
+  }
+</script>
+
+</body>
+</html>
